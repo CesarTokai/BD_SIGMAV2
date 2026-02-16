@@ -1,0 +1,32 @@
+# Database Backups - Ignore large backup files
+backups/*.sql
+backups/*.dump
+backups/*.gz
+backups/*.zip
+backups/*.tar
+backups/*.tar.gz
+
+# Keep documentation
+!backups/README.md
+!backups/.gitkeep
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# OS specific files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Log files
+*.log
