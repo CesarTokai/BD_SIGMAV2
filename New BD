@@ -1,0 +1,321 @@
+Create database mbl;
+use mbl;
+
+
+create table users (
+  id bigint primary key auto_increment,
+  username varchar(100) not null,
+  email varchar(255) not null unique,
+  password varchar(255) not null,
+  role enum('USER', 'ADMIN') not null default 'USER'
+);
+
+create table categories (
+  id bigint primary key auto_increment,
+  name varchar(100) not null unique,
+  description text,
+  parent_category_id bigint,
+  foreign key (parent_category_id) references categories(id) on delete set null
+);
+
+create table products (
+  id bigint primary key auto_increment,
+  name varchar(255) not null,
+  description text,
+  price decimal(10,2) not null,
+  stock int not null default 0,
+  min_stock int default 0,
+  category_id bigint,
+  foreign key (category_id) references categories(id) on delete set null
+);
+
+create table product_variants (
+  id bigint primary key auto_increment,
+  product_id bigint not null,
+  variant_name varchar(100) not null,
+  variant_value varchar(100) not null,
+  foreign key (product_id) references products(id) on delete cascade
+);
+
+create table suppliers (
+  id bigint primary key auto_increment,
+  supplier_name varchar(255) not null,
+  contact_name varchar(255),
+  phone varchar(20),
+  email varchar(255),
+  is_active boolean default true
+);
+
+create table warehouses (
+  id bigint primary key auto_increment,
+  name varchar(100) not null,
+  location text
+);
+
+-- =====================================================
+-- 2. TABLAS DE INVENTARIO Y STOCK
+-- =====================================================
+
+create table stock (
+  id bigint primary key auto_increment,
+  product_id bigint not null,
+  variant_id bigint,
+  warehouse_id bigint not null,
+  quantity int not null default 0,
+  unique key uk_stock (product_id, variant_id, warehouse_id),
+  foreign key (product_id) references products(id) on delete cascade,
+  foreign key (variant_id) references product_variants(id) on delete cascade,
+  foreign key (warehouse_id) references warehouses(id) on delete cascade
+);
+
+create table inventory_movements (
+  id bigint primary key auto_increment,
+  product_id bigint not null,
+  variant_id bigint,
+  movement_date timestamp not null default current_timestamp,
+  quantity int not null,
+  reference_type varchar(30),
+  reference_id bigint,
+  foreign key (product_id) references products(id) on delete cascade,
+  foreign key (variant_id) references product_variants(id) on delete set null
+);
+
+-- =====================================================
+-- 3. TABLAS DE COMPRAS (Proveedores)
+-- =====================================================
+
+create table purchases (
+  id bigint primary key auto_increment,
+  supplier_id bigint not null,
+  purchase_date timestamp not null default current_timestamp,
+  invoice_number varchar(50),
+  total decimal(12,2),
+  status varchar(30) default 'PENDING',
+  created_by bigint,
+  foreign key (supplier_id) references suppliers(id) on delete cascade,
+  foreign key (created_by) references users(id) on delete set null
+);
+
+create table purchase_items (
+  id bigint primary key auto_increment,
+  purchase_id bigint not null,
+  product_id bigint not null,
+  variant_id bigint,
+  quantity int not null,
+  unit_cost decimal(10,2) not null,
+  foreign key (purchase_id) references purchases(id) on delete cascade,
+  foreign key (product_id) references products(id) on delete cascade,
+  foreign key (variant_id) references product_variants(id) on delete set null
+);
+
+-- =====================================================
+-- 4. TABLAS DE ÓRDENES Y VENTAS
+-- =====================================================
+
+create table orders (
+  id bigint primary key auto_increment,
+  user_id bigint not null,
+  order_date timestamp not null default current_timestamp,
+  total_amount decimal(12,2) not null default 0,
+  status varchar(30) default 'PENDING',
+  shipping_address text,
+  notes text,
+  foreign key (user_id) references users(id) on delete cascade
+);
+
+create table order_items (
+  id bigint primary key auto_increment,
+  order_id bigint not null,
+  product_id bigint not null,
+  variant_id bigint,
+  quantity int not null,
+  unit_price decimal(10,2) not null,
+  total_price decimal(12,2) generated always as (quantity * unit_price) stored,
+  foreign key (order_id) references orders(id) on delete cascade,
+  foreign key (product_id) references products(id) on delete cascade,
+  foreign key (variant_id) references product_variants(id) on delete set null
+);
+
+-- =====================================================
+-- 5. TABLAS DE CLIENTES
+-- =====================================================
+
+create table customers (
+  id bigint primary key auto_increment,
+  user_id bigint not null,
+  customer_name varchar(255) not null,
+  address text,
+  city varchar(100),
+  state varchar(100),
+  postal_code varchar(20),
+  phone varchar(20),
+  total_orders int default 0,
+  total_spent decimal(12,2) default 0,
+  last_order_date timestamp null,
+  foreign key (user_id) references users(id) on delete cascade
+);
+
+-- =====================================================
+-- 6. TABLAS DE PAGOS Y ENVÍOS
+-- =====================================================
+
+create table payments (
+  id bigint primary key auto_increment,
+  order_id bigint not null,
+  user_id bigint not null,
+  payment_date timestamp not null default current_timestamp,
+  amount decimal(10,2) not null,
+  payment_method varchar(50),
+  transaction_id varchar(255),
+  status varchar(30) default 'PENDING',
+  foreign key (order_id) references orders(id) on delete cascade,
+  foreign key (user_id) references users(id) on delete cascade
+);
+
+create table shipping (
+  id bigint primary key auto_increment,
+  order_id bigint not null,
+  carrier varchar(100),
+  tracking_number varchar(100),
+  shipping_date timestamp null,
+  delivered_at timestamp null,
+  status varchar(30) default 'PENDING',
+  foreign key (order_id) references orders(id) on delete cascade
+);
+
+-- =====================================================
+-- 7. TABLAS DE FACTURACIÓN Y DEVOLUCIONES
+-- =====================================================
+
+create table invoices (
+  id bigint primary key auto_increment,
+  order_id bigint not null,
+  user_id bigint not null,
+  invoice_number varchar(30) unique,
+  rfc varchar(20),
+  business_name varchar(255),
+  subtotal decimal(12,2),
+  tax_amount decimal(12,2),
+  total decimal(12,2),
+  uuid varchar(36),
+  xml_url varchar(500),
+  pdf_url varchar(500),
+  status varchar(30) default 'DRAFT',
+  issued_at timestamp null,
+  foreign key (order_id) references orders(id) on delete cascade,
+  foreign key (user_id) references users(id) on delete cascade
+);
+
+create table return_requests (
+  id bigint primary key auto_increment,
+  order_id bigint not null,
+  user_id bigint not null,
+  product_id bigint not null,
+  quantity int not null,
+  reason varchar(255),
+  status varchar(30) default 'PENDING',
+  refund_amount decimal(10,2),
+  request_date timestamp not null default current_timestamp,
+  resolved_at timestamp null,
+  foreign key (order_id) references orders(id) on delete cascade,
+  foreign key (user_id) references users(id) on delete cascade,
+  foreign key (product_id) references products(id) on delete cascade
+);
+
+-- =====================================================
+-- 8. TABLAS DE MARKETING
+-- =====================================================
+
+create table reviews (
+  id bigint primary key auto_increment,
+  product_id bigint not null,
+  user_id bigint not null,
+  review_date timestamp not null default current_timestamp,
+  rating int not null check (rating >= 1 and rating <= 5),
+  comment text,
+  is_approved boolean default false,
+  foreign key (product_id) references products(id) on delete cascade,
+  foreign key (user_id) references users(id) on delete cascade
+);
+
+create table promotions (
+  id bigint primary key auto_increment,
+  product_id bigint not null,
+  discount_percentage decimal(5,2) not null check (discount_percentage >= 0 and discount_percentage <= 100),
+  start_date timestamp not null,
+  end_date timestamp not null,
+  is_active boolean default true,
+  foreign key (product_id) references products(id) on delete cascade
+);
+
+-- =====================================================
+-- 9. TABLA DE AUDITORÍA
+-- =====================================================
+
+create table audit_logs (
+  id bigint primary key auto_increment,
+  table_name varchar(100) not null,
+  operation varchar(50) not null,
+  operation_date timestamp not null default current_timestamp,
+  user_id bigint,
+  old_values json,
+  new_values json,
+  foreign key (user_id) references users(id) on delete set null
+);
+
+-- =====================================================
+-- 10. ÍNDICES PARA OPTIMIZAR CONSULTAS
+-- =====================================================
+
+create index idx_products_category on products(category_id);
+create index idx_products_price on products(price);
+create index idx_products_stock on products(stock);
+
+create index idx_orders_user on orders(user_id);
+create index idx_orders_status on orders(status);
+create index idx_orders_date on orders(order_date);
+
+create index idx_order_items_order on order_items(order_id);
+create index idx_order_items_product on order_items(product_id);
+
+create index idx_payments_order on payments(order_id);
+create index idx_payments_status on payments(status);
+
+create index idx_shipping_order on shipping(order_id);
+create index idx_shipping_status on shipping(status);
+
+create index idx_inventory_movements_product on inventory_movements(product_id);
+create index idx_inventory_movements_date on inventory_movements(movement_date);
+
+create index idx_stock_product on stock(product_id);
+create index idx_stock_warehouse on stock(warehouse_id);
+
+create index idx_reviews_product on reviews(product_id);
+create index idx_reviews_rating on reviews(rating);
+
+create index idx_promotions_dates on promotions(start_date, end_date);
+create index idx_promotions_active on promotions(is_active);
+
+create index idx_audit_logs_user on audit_logs(user_id);
+create index idx_audit_logs_date on audit_logs(operation_date);
+create index idx_audit_logs_table on audit_logs(table_name);
+
+-- =====================================================
+-- 11. DATOS INICIALES (Opcional)
+-- =====================================================
+
+-- Usuario administrador por defecto (password: admin123)
+-- La contraseña debe estar hasheada con BCrypt
+insert into users (username, email, password, role) values
+('admin', 'admin@tienda.com', '$2a$10$N9qo8uLOickgx2ZMRZoMy.MrJ7Z6qR8ZxUxVZ5YqX6qX6qX6qX6q', 'ADMIN');
+
+-- Categorías de ejemplo
+insert into categories (name, description) values
+('Sofás', 'Sofás y sillones para sala'),
+('Comedores', 'Mesas y sillas para comedor'),
+('Dormitorios', 'Camas, burós y tocadores'),
+('Oficina', 'Muebles para oficina y estudio');
+
+-- Almacén por defecto
+insert into warehouses (name, location) values
+('Almacén Principal', 'Av. Principal #123, Ciudad');
